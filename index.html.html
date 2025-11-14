@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>60mハードル評価アプリ</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "游ゴシック", "YuGothic", sans-serif; margin: 20px; }
+    h1 { font-size: 1.6rem; margin-bottom: 0.5rem; }
+    label { display: block; margin-top: 0.75rem; }
+    input, select, button { font-size: 1rem; padding: 0.3rem 0.4rem; }
+    .field { margin-bottom: 0.6rem; }
+    .note { font-size: 0.85rem; color: #555; }
+    .error { color: #c00; font-size: 0.85rem; }
+    .box { border: 1px solid #ccc; padding: 0.8rem; margin-top: 1rem; max-width: 480px; }
+    ul { margin: 0.3rem 0 0.3rem 1.2rem; }
+  </style>
+</head>
+<body>
+  <h1>60mハードル評価アプリ</h1>
+
+  <div class="field">
+    <label for="gender">性別:</label>
+    <select id="gender">
+      <option value="男子">男子</option>
+      <option value="女子">女子</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="time100">100m走タイム（秒）</label>
+    <div class="note">※半角数字＋小数点のみ（例：10.34）</div>
+    <input id="time100" type="text" inputmode="decimal" />
+    <div id="error100" class="error"></div>
+  </div>
+
+  <button id="btnPredict">目標タイムと基準を表示</button>
+
+  <div id="result" class="box" style="display:none;"></div>
+
+  <script>
+    const coefficients = {
+      "男子": { slope: 0.4908344187605501, intercept: 7.913766220212479, sd: 0.5578520083447149 },
+      "女子": { slope: 0.5429117681124704, intercept: 8.850418906258987, sd: 0.8428958484338155 }
+    };
+
+    let currentBounds = null; // 保存しておいて評価に使う
+
+    function isValidNumber(str) {
+      return /^\d+(\.\d+)?$/.test(str.trim());
+    }
+
+    function round2(x) {
+      return Math.round(x * 100) / 100;
+    }
+
+    function createBounds(pred, sd) {
+      const s = round2(pred - 0.6 * sd);
+      const a = round2(pred);
+      const b = round2(pred + 0.5 * sd);
+      const c = round2(pred + 1.0 * sd);
+      return { S: s, A: a, B: b, C: c, pred: round2(pred) };
+    }
+
+    document.getElementById("btnPredict").addEventListener("click", function() {
+      const gender = document.getElementById("gender").value;
+      const t100Str = document.getElementById("time100").value;
+      const err100 = document.getElementById("error100");
+      err100.textContent = "";
+
+      if (!isValidNumber(t100Str)) {
+        err100.textContent = "100m走タイムは半角数字と小数点のみで入力してください。";
+        return;
+      }
+      const t100 = parseFloat(t100Str);
+      const coef = coefficients[gender];
+      const pred = coef.slope * t100 + coef.intercept;
+      const bounds = createBounds(pred, coef.sd);
+      currentBounds = bounds;
+
+      const resultDiv = document.getElementById("result");
+      resultDiv.style.display = "block";
+
+      resultDiv.innerHTML = "";
+      const p0 = document.createElement("p");
+      p0.textContent = "目標60mハードルタイム: " + bounds.pred.toFixed(2) + " 秒";
+      resultDiv.appendChild(p0);
+
+      const ul = document.createElement("ul");
+
+      function addItem(text) {
+        const li = document.createElement("li");
+        li.textContent = text;
+        ul.appendChild(li);
+      }
+
+      addItem("S評価: " + bounds.S.toFixed(2) + "秒 以下");
+      addItem("A評価: " + bounds.S.toFixed(2) + "秒 より遅く かつ " + bounds.A.toFixed(2) + "秒 以下");
+      addItem("B評価: " + bounds.A.toFixed(2) + "秒 より遅く かつ " + bounds.B.toFixed(2) + "秒 以下");
+      addItem("C評価: " + bounds.B.toFixed(2) + "秒 より遅く かつ " + bounds.C.toFixed(2) + "秒 以下");
+      addItem("D評価: " + bounds.C.toFixed(2) + "秒 より遅い");
+
+      resultDiv.appendChild(ul);
+
+      // 60mハードル入力欄と評価ボタン
+      const fieldDiv = document.createElement("div");
+      fieldDiv.className = "field";
+      const lbl = document.createElement("label");
+      lbl.textContent = "60mハードル実測タイム（秒）";
+      fieldDiv.appendChild(lbl);
+      const note = document.createElement("div");
+      note.className = "note";
+      note.textContent = "※半角数字と小数点のみ（例：10.34）";
+      fieldDiv.appendChild(note);
+      const input = document.createElement("input");
+      input.id = "time60";
+      input.type = "text";
+      input.setAttribute("inputmode", "decimal");
+      fieldDiv.appendChild(input);
+      const err60 = document.createElement("div");
+      err60.id = "error60";
+      err60.className = "error";
+      fieldDiv.appendChild(err60);
+
+      const btnEval = document.createElement("button");
+      btnEval.textContent = "評価する";
+      btnEval.id = "btnEval";
+
+      const evalP = document.createElement("p");
+      evalP.id = "evalResult";
+
+      const reportP = document.createElement("p");
+      reportP.id = "reportInfo";
+      reportP.style.color = "#c00";
+
+      resultDiv.appendChild(fieldDiv);
+      resultDiv.appendChild(btnEval);
+      resultDiv.appendChild(evalP);
+      resultDiv.appendChild(reportP);
+
+      btnEval.addEventListener("click", function() {
+        err60.textContent = "";
+        evalP.textContent = "";
+        reportP.textContent = "";
+
+        const t60Str = input.value;
+        if (!isValidNumber(t60Str)) {
+          err60.textContent = "60mハードルタイムは半角数字と小数点のみで入力してください。";
+          return;
+        }
+        const t60 = parseFloat(t60Str);
+        const b = currentBounds;
+        let grade = "";
+        if (t60 <= b.S) grade = "S";
+        else if (t60 <= b.A) grade = "A";
+        else if (t60 <= b.B) grade = "B";
+        else if (t60 <= b.C) grade = "C";
+        else grade = "D";
+
+        evalP.textContent = "評価結果: " + grade;
+
+        if (grade === "D") {
+          const excess = Math.max(0, t60 - b.C);
+          const chars = Math.ceil(excess * 100) * 10;
+          reportP.textContent = "D評価のため、" + chars + "文字のレポートを提出してください。";
+        }
+      });
+    });
+  </script>
+</body>
+</html>
